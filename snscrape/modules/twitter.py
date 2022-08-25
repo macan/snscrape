@@ -946,6 +946,33 @@ class _TwitterAPIScraper(snscrape.base.Scraper):
 	def _count_tweets_and_users(self, entries):
 		return sum(entry['entryId'].startswith('sq-I-t-') or entry['entryId'].startswith('tweet-') or entry['entryId'].startswith('user-') for entry in entries)
 
+	def _v2_timeline_instructions_to_tweets_or_users(self, obj, includeConversationThreads = False):
+		# No data format test, just a hard and loud crash if anything's wrong :-)
+		for instruction in obj['timeline']['instructions']:
+			if 'addEntries' in instruction:
+				entries = instruction['addEntries']['entries']
+			elif 'replaceEntry' in instruction:
+				entries = [instruction['replaceEntry']['entry']]
+			else:
+				continue
+			for entry in entries:
+				if entry['entryId'].startswith('sq-I-t-') or entry['entryId'].startswith('tweet-'):
+					yield from self._v2_instruction_tweet_entry_to_tweet(entry['entryId'], entry['content'], obj)
+				elif entry['entryId'].startswith('user-'):
+					yield self._user_to_user(obj['globalObjects']['users'][entry['content']['item']['content']['user']['id']])
+
+	def _v2_instruction_tweet_entry_to_tweet(self, entryId, entry, obj):
+		if 'tweet' in entry['item']['content']:
+			if 'promotedMetadata' in entry['item']['content']['tweet']: # Promoted tweet aka ads
+				return
+			if entry['item']['content']['tweet']['id'] not in obj['globalObjects']['tweets']:
+				_logger.warning(f'Skipping tweet {entry["item"]["content"]["tweet"]["id"]} which is not in globalObjects')
+				return
+			tweet = obj['globalObjects']['tweets'][entry['item']['content']['tweet']['id']]
+		else:
+			raise snscrape.base.ScraperException(f'Unable to handle entry {entryId!r}')
+		yield self._tweet_to_tweet(tweet, obj)
+
 	def _get_tweet_id(self, tweet):
 		return tweet['id'] if 'id' in tweet else int(tweet['id_str'])
 
@@ -1673,6 +1700,16 @@ class TwitterSearchScraper(_TwitterAPIScraper):
 			mode = TwitterSearchScraperMode.TOP if top else TwitterSearchScraperMode.LIVE
 		self._mode = mode
 
+	def _check_scroll_response(self, r):
+		if r.status_code == 429:
+			# Accept a 429 response as "valid" to prevent retries; handled explicitly in get_items
+			return True, None
+		if r.headers.get('content-type').replace(' ', '') != 'application/json;charset=utf-8':
+			return False, 'content type is not JSON'
+		if r.status_code != 200:
+			return False, 'non-200 status code'
+		return True, None
+
 	def get_items(self):
 		if not self._query.strip():
 			raise ValueError('empty query')
@@ -1729,10 +1766,12 @@ class TwitterSearchScraper(_TwitterAPIScraper):
 		group.add_argument('--user', action = 'store_true', default = False, help = 'Search users instead of tweets')
 		subparser.add_argument('--max-empty-pages', dest = 'maxEmptyPages', metavar = 'N', type = int, default = 20, help = 'Stop after N empty pages from Twitter; set to 0 to disable')
 		subparser.add_argument('query', type = snscrape.utils.nonempty_string_arg('query'), help = 'A Twitter search string')
+		subparser.add_argument('--rfilter', type = str, help = 'A Twitter search result filter: user/image/video')
 
 	@classmethod
 	def _cli_from_args(cls, args):
 		return cls._cli_construct(args, args.query, cursor = args.cursor, mode = TwitterSearchScraperMode._cli_from_args(args), maxEmptyPages = args.maxEmptyPages)
+		return cls._cli_construct(args, args.query, cursor = args.cursor, mode = TwitterSearchScraperMode._cli_from_args(args), maxEmptyPages = args.maxEmptyPages, rfilter = args.rfilter)
 
 
 class TwitterUserScraper(TwitterSearchScraper):
