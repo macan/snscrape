@@ -780,6 +780,22 @@ class _TwitterAPIScraper(snscrape.base.Scraper):
 			return False, ('non-200 response' if r.status_code != 404 else 'blocked') + f' ({r.status_code})'
 		return True, None
 
+	def _set_auth_info(self, auth_token, csrf):
+		if 'auth_token' not in self._session.cookies:
+			self._session.cookies['auth_token'] = auth_token
+		if 'ct0' not in self._session.cookies:
+			self._session.cookies['ct0'] = csrf
+		if 'x-csrf-token' not in self._apiHeaders:
+			self._apiHeaders['x-csrf-token'] = csrf
+
+	def _clr_auth_info(self):
+		if 'auth_token' in self._session.cookies:
+			del self._session.cookies['auth_token']
+		if 'ct0' in self._session.cookies:
+			del self._session.cookies['ct0']
+		if 'x-csrf-token' in self._apiHeaders:
+			del self._apiHeaders['x-csrf-token']
+
 	def _ensure_guest_token(self, url = None):
 		if self._guestTokenManager.token is None:
 			_logger.info('Retrieving guest token')
@@ -1777,12 +1793,14 @@ class TwitterSearchScraper(_TwitterAPIScraper):
 class TwitterUserScraper(TwitterSearchScraper):
 	name = 'twitter-user'
 
-	def __init__(self, user, **kwargs):
+	def __init__(self, user, auth, csrf, **kwargs):
 		self._isUserId = isinstance(user, int)
 		if not self._isUserId and not self.is_valid_username(user):
 			raise ValueError('Invalid username')
 		super().__init__(f'from:{user}', **kwargs)
 		self._user = user
+		self._auth = auth
+		self._csrf = csrf
 		self._baseUrl = f'https://twitter.com/{self._user}' if not self._isUserId else f'https://twitter.com/i/user/{self._user}'
 
 	def _get_entity(self):
@@ -1833,10 +1851,12 @@ class TwitterUserScraper(TwitterSearchScraper):
 
 		subparser.add_argument('--user-id', dest = 'isUserId', action = 'store_true', default = False, help = 'Use user ID instead of username')
 		subparser.add_argument('user', type = user, help = 'A Twitter username (without @)')
+		subparser.add_argument('--auth', type = snscrape.base.nonempty_string('auth'), help = 'Auth token')
+		subparser.add_argument('--csrf', type = snscrape.base.nonempty_string('csrf'), help = 'CSRF token')
 
 	@classmethod
 	def _cli_from_args(cls, args):
-		return cls._cli_construct(args, user = int(args.user) if args.isUserId else args.user)
+		return cls._cli_construct(args, user = int(args.user) if args.isUserId else args.user, auth = args.auth, csrf = args.csrf)
 
 
 class TwitterProfileScraper(TwitterUserScraper):
@@ -1915,6 +1935,65 @@ class TwitterProfileScraper(TwitterUserScraper):
 					continue
 				yield tweet
 
+
+class TwitterUserConnectScraper(TwitterUserScraper):
+	name = 'twitter-uconnect'
+
+	def get_items(self):
+		if not self._isUserId:
+			userId = self.entity.id
+		else:
+			userId = self._user
+		paginationVariables = {
+			'include_profile_interstitial_type': '1',
+			'include_blocking': '1',
+			'include_blocked_by': '1',
+			'include_followed_by': '1',
+			'include_want_retweets': '1',
+			'include_mute_edge': '1',
+			'include_can_dm': '1',
+			'include_can_media_tag': '1',
+			'include_ext_has_nft_avatar': '1',
+			'skip_status': '1',
+			'cards_platform': 'Web-12',
+			'include_cards': '1',
+			'include_ext_alt_text': 'true',
+			'include_ext_limited_action_results': 'false',
+			'include_quote_count': 'true',
+			'include_reply_count': '1',
+			'tweet_mode': 'extended',
+			'include_ext_collab_control': 'true',
+			'include_entities': 'true',
+			'include_user_entities': 'true',
+			'include_ext_media_color': 'true',
+			'include_ext_media_availability': 'true',
+			'include_ext_sensitive_media_warning': 'true',
+			'include_ext_trusted_friends_metadata': 'true',
+			'send_error_codes': 'true',
+			'simple_quoted_tweet': 'true',
+			'count': '20',
+			'display_location': 'connect',
+			'client_type': 'rweb',
+			'user_id': userId,
+			'ext': 'mediaStats,highlightedLabel,hasNftAvatar,voiceInfo,enrichments,superFollowMetadata,unmentionInfo,editControl,collab_control,vibe'
+		}
+		variables = paginationVariables.copy()
+
+		if self._auth is None or self._csrf is None:
+			print("Auth info must be provided.")
+			return
+		self._set_auth_info(self._auth, self._csrf)
+		obj = self._get_api_data('https://twitter.com/i/api/2/people_discovery/modules_urt.json', _TwitterAPIType.V2, variables)
+		self._clr_auth_info()
+		for instruction in obj['timeline']['instructions']:
+			if not 'addEntries' in instruction:
+				continue
+			for entry in instruction['addEntries']['entries']:
+				if entry['entryId'] == 'connect-module-2':
+					for item in entry['content']['timelineModule']['items']:
+						self._user = item['item']['content']['user']['id']
+						self._isUserId = True
+						yield self._get_entity()
 
 class TwitterHashtagScraper(TwitterSearchScraper):
 	name = 'twitter-hashtag'
