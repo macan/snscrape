@@ -1935,6 +1935,41 @@ class TwitterProfileScraper(TwitterUserScraper):
 					continue
 				yield tweet
 
+class TwitterUserRecommendationScraper(TwitterUserScraper):
+	name = 'twitter-urecommend'
+
+	def get_items(self):
+		if not self._isUserId:
+			userId = self.entity.id
+		else:
+			userId = self._user
+		paginationVariables = {
+			'include_profile_interstitial_type': '1',
+			'include_blocking': '1',
+			'include_blocked_by': '1',
+			'include_followed_by': '1',
+			'include_want_retweets': '1',
+			'include_mute_edge': '1',
+			'include_can_dm': '1',
+			'include_can_media_tag': '1',
+			'include_ext_has_nft_avatar': '1',
+			'skip_status': '1',
+			'pc': 'true',
+			'display_location': 'profile_accounts_sidebar',
+			'limit': 4,
+			'user_id': userId,
+			'ext': 'mediaStats,highlightedLabel,hasNftAvatar,voiceInfo,enrichments,superFollowMetadata,unmentionInfo,editControl,collab_control,vibe'
+		}
+		variables = paginationVariables.copy()
+
+		if self._auth is None or self._csrf is None:
+			print("Auth info must be provided.")
+			return
+		self._set_auth_info(self._auth, self._csrf)
+		obj = self._get_api_data('https://twitter.com/i/api/1.1/users/recommendations.json', _TwitterAPIType.V2, variables)
+		self._clr_auth_info()
+		for _item in obj:
+			yield self._user_to_user(_item['user'])
 
 class TwitterUserConnectScraper(TwitterUserScraper):
 	name = 'twitter-uconnect'
