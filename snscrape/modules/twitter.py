@@ -1699,7 +1699,7 @@ class TwitterSearchScraperMode(enum.Enum):
 class TwitterSearchScraper(_TwitterAPIScraper):
 	name = 'twitter-search'
 
-	def __init__(self, query, *, cursor = None, mode = TwitterSearchScraperMode.LIVE, top = None, maxEmptyPages = 20, **kwargs):
+	def __init__(self, query, *, cursor = None, mode = TwitterSearchScraperMode.LIVE, top = None, maxEmptyPages = 20, auth = None, csrf = None, **kwargs):
 		if not query.strip():
 			raise ValueError('empty query')
 		if mode not in tuple(TwitterSearchScraperMode):
@@ -1715,6 +1715,8 @@ class TwitterSearchScraper(_TwitterAPIScraper):
 			warnings.warn(f'`top` argument is deprecated, use `mode = {replacement}` instead of `top = {bool(top)}`', snscrape.base.DeprecatedFeatureWarning, stacklevel = 2)
 			mode = TwitterSearchScraperMode.TOP if top else TwitterSearchScraperMode.LIVE
 		self._mode = mode
+		self._auth = auth
+		self._csrf = csrf
 
 	def _check_scroll_response(self, r):
 		if r.status_code == 429:
@@ -1771,6 +1773,9 @@ class TwitterSearchScraper(_TwitterAPIScraper):
 		params = {'variables': variables, 'features': features}
 		paginationParams = {'variables': paginationVariables, 'features': features}
 
+		if self._auth is not None and self._csrf is not None:
+			self._set_auth_info(self._auth, self._csrf)
+
 		for obj in self._iter_api_data('https://twitter.com/i/api/graphql/7jT5GT59P8IFjgxwqnEdQw/SearchTimeline', _TwitterAPIType.GRAPHQL, params, paginationParams, cursor = self._cursor, instructionsPath = ['data', 'search_by_raw_query', 'search_timeline', 'timeline', 'instructions']):
 			yield from self._graphql_timeline_instructions_to_tweets(obj['data']['search_by_raw_query']['search_timeline']['timeline']['instructions'])
 
@@ -1779,15 +1784,15 @@ class TwitterSearchScraper(_TwitterAPIScraper):
 		subparser.add_argument('--cursor', metavar = 'CURSOR', help = '(deprecated)')
 		group = subparser.add_mutually_exclusive_group(required = False)
 		group.add_argument('--top', action = 'store_true', default = False, help = 'Search top tweets instead of live/chronological')
-		group.add_argument('--user', action = 'store_true', default = False, help = 'Search users instead of tweets')
 		subparser.add_argument('--max-empty-pages', dest = 'maxEmptyPages', metavar = 'N', type = int, default = 20, help = 'Stop after N empty pages from Twitter; set to 0 to disable')
 		subparser.add_argument('query', type = snscrape.utils.nonempty_string_arg('query'), help = 'A Twitter search string')
 		subparser.add_argument('--rfilter', type = str, help = 'A Twitter search result filter: user/image/video')
+		subparser.add_argument('--auth', type = snscrape.utils.nonempty_string('auth'), help = 'Auth token')
+		subparser.add_argument('--csrf', type = snscrape.utils.nonempty_string('csrf'), help = 'CSRF token')
 
 	@classmethod
 	def _cli_from_args(cls, args):
-		return cls._cli_construct(args, args.query, cursor = args.cursor, mode = TwitterSearchScraperMode._cli_from_args(args), maxEmptyPages = args.maxEmptyPages)
-		return cls._cli_construct(args, args.query, cursor = args.cursor, mode = TwitterSearchScraperMode._cli_from_args(args), maxEmptyPages = args.maxEmptyPages, rfilter = args.rfilter)
+		return cls._cli_construct(args, args.query, cursor = args.cursor, mode = TwitterSearchScraperMode._cli_from_args(args), top = args.top, maxEmptyPages = args.maxEmptyPages, auth = args.auth, csrf = args.csrf)
 
 
 class TwitterUserScraper(TwitterSearchScraper):
