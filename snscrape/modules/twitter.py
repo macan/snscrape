@@ -1027,6 +1027,8 @@ class _TwitterAPIScraper(snscrape.base.Scraper):
 				kwargs['sourceUrl'] = match.group(1)
 			if (match := re.search(r'>([^<]*)<', tweet['source'])):
 				kwargs['sourceLabel'] = match.group(1)
+		else:
+                        kwargs['source'] = ''
 		if 'extended_entities' in tweet and 'media' in tweet['extended_entities']:
 			media = []
 			for medium in tweet['extended_entities']['media']:
