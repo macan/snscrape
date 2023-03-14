@@ -1688,13 +1688,19 @@ class TwitterSearchScraperMode(enum.Enum):
 	LIVE = 'live'
 	TOP = 'top'
 	USER = 'user'
+	IMAGE = 'image'
+	VIDEO = 'video'
 
 	@classmethod
 	def _cli_from_args(cls, args):
-		if args.top:
+		if args.mode == 'top':
 			return cls.TOP
-		if args.user:
+		elif args.mode == 'user':
 			return cls.USER
+		elif args.mode == 'image':
+			return cls.IMAGE
+		elif args.mode == 'video':
+			return cls.VIDEO
 		return cls.LIVE
 
 
@@ -1785,7 +1791,7 @@ class TwitterSearchScraper(_TwitterAPIScraper):
 	def _cli_setup_parser(cls, subparser):
 		subparser.add_argument('--cursor', metavar = 'CURSOR', help = '(deprecated)')
 		group = subparser.add_mutually_exclusive_group(required = False)
-		group.add_argument('--top', action = 'store_true', default = False, help = 'Search top tweets instead of live/chronological')
+		group.add_argument('--mode', type = snscrape.base.nonempty_string('mode'), help = 'Search types: live/top/user/image/video')
 		subparser.add_argument('--max-empty-pages', dest = 'maxEmptyPages', metavar = 'N', type = int, default = 20, help = 'Stop after N empty pages from Twitter; set to 0 to disable')
 		subparser.add_argument('query', type = snscrape.utils.nonempty_string_arg('query'), help = 'A Twitter search string')
 		subparser.add_argument('--rfilter', type = str, help = 'A Twitter search result filter: user/image/video')
@@ -1794,7 +1800,7 @@ class TwitterSearchScraper(_TwitterAPIScraper):
 
 	@classmethod
 	def _cli_from_args(cls, args):
-		return cls._cli_construct(args, args.query, cursor = args.cursor, mode = TwitterSearchScraperMode._cli_from_args(args), top = args.top, maxEmptyPages = args.maxEmptyPages, auth = args.auth, csrf = args.csrf)
+		return cls._cli_construct(args, args.query, cursor = args.cursor, mode = TwitterSearchScraperMode._cli_from_args(args), maxEmptyPages = args.maxEmptyPages, auth = args.auth, csrf = args.csrf)
 
 
 class TwitterUserScraper(TwitterSearchScraper):
