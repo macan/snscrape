@@ -1585,6 +1585,15 @@ class _TwitterAPIScraper(snscrape.base.Scraper):
 				elif not entry['entryId'].startswith(('cursor-', 'toptabsrpusermodule-', 'tweetdetailrelatedtweets-', 'label-')):
 					_logger.warning(f'Skipping unrecognised entry ID: {entry["entryId"]!r}')
 
+	def _graphql_timeline_instructions_to_user(self, instructions, includeConversationThreads = False):
+		for instruction in instructions:
+			if instruction['type'] != 'TimelineAddEntries':
+				continue
+			for entry in instruction['entries']:
+				if entry['entryId'].startswith('whoToFollow-'):
+					for item in entry['content']['items']:
+						pass
+
 	def _render_text_with_urls(self, text, urls):
 		if not urls:
 			return text
