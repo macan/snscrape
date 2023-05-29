@@ -35,6 +35,7 @@ class TelegramPost(snscrape.base.Item):
 	user: str
 	author: str
 	forward_from: str
+	forward_url: str
 	photos: list
 	videos: list
 	reply: list
@@ -113,6 +114,7 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 				user = None
 				author = None
 				forward_from = None
+				forward_url = None
 				photos = []
 				videos = []
 				for link in post.find_all('a'):
@@ -123,8 +125,10 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 						if (_span := link.find('span')):
 							author = _span.text
 							continue
-					if 'tgme_widget_message_forward_from'in link.parent.attrs.get('class', []):
-						forward_from = link['href']
+					if 'tgme_widget_message_forwarded_from'in link.parent.attrs.get('class', []):
+						forward_url = link['href']
+						if (_span := link.find('span')):
+							forward_from = _span.text
 						continue
 					if 'tgme_widget_message_photo_wrap' in link.attrs.get('class', []):
 						_style = link.attrs.get('style')
@@ -153,6 +157,7 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 				user = None
 				author = None
 				forward_from = None
+				forward_url = None
 				photos = []
 				videos = []
 				content = None
@@ -178,7 +183,7 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 					else:
 						_logger.warning(f'Could not process link preview right image on {url}')
 				linkPreview = LinkPreview(**kwargs)
-			yield TelegramPost(url = url, date = date, content = content, outlinks = outlinks, views = views, user = user, author = author, forward_from = forward_from, photos = photos, videos = videos, reply = reply, linkPreview = linkPreview)
+			yield TelegramPost(url = url, date = date, content = content, outlinks = outlinks, views = views, user = user, author = author, forward_from = forward_from, forward_url = forward_url, photos = photos, videos = videos, reply = reply, linkPreview = linkPreview)
 
 	def get_items(self):
 		if self.info:
