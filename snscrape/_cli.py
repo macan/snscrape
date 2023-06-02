@@ -321,6 +321,7 @@ def main():
 				logger.info('Exiting after 0 results')
 				return
 			for i, item in enumerate(scraper.get_items(), start = 1):
+				if item is None: break
 				if args.since is not None and item.date < args.since:
 					logger.info(f'Exiting due to reaching older results than {args.since}')
 					break

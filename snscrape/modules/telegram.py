@@ -67,17 +67,23 @@ class TelegramChannel(snscrape.base.Item):
 class TelegramChannelScraper(snscrape.base.Scraper):
 	name = 'telegram-channel'
 
-	def __init__(self, name, info = False, **kwargs):
+	def __init__(self, name, info = False, postid = None, postn = 1, **kwargs):
 		super().__init__(**kwargs)
 		self._name = name
 		self._headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4044.138 Safari/537.36'}
 		self._initialPage = None
 		self._initialPageSoup = None
+		self._idx = 0
 		self.info = info
+		self.postid = postid
+		self.postn = postn
 
 	def _initial_page(self):
 		if self._initialPage is None:
-			r = self._get(f'https://t.me/s/{self._name}', headers = self._headers)
+			if self.postid is not None:
+				r = self._get(f'https://t.me/{self._name}/{self.postid}?embed=1&mode=tme', headers = self._headers)
+			else:
+				r = self._get(f'https://t.me/s/{self._name}', headers = self._headers)
 			if r.status_code != 200:
 				raise snscrape.base.ScraperException(f'Got status code {r.status_code}')
 			self._initialPage, self._initialPageSoup = r, bs4.BeautifulSoup(r.text, 'lxml')
@@ -107,61 +113,54 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 			else:
 				reply = []
 			message = post.select('div.tgme_widget_message_text.js-message_text')
+			user = None
+			author = None
+			forward_from = None
+			forward_url = None
+			photos = []
+			videos = []
+			outlinks = []
 			if len(message) > 0:
 				message = message[0]
 				content = message.text
-				outlinks = []
-				user = None
-				author = None
-				forward_from = None
-				forward_url = None
-				photos = []
-				videos = []
-				for link in post.find_all('a'):
-					if 'tgme_widget_message_user'in link.parent.attrs.get('class', []):
-						user = link['href']
-						continue
-					if 'tgme_widget_message_author'in link.parent.attrs.get('class', []):
-						if (_span := link.find('span')):
-							author = _span.text
-							continue
-					if 'tgme_widget_message_forwarded_from'in link.parent.attrs.get('class', []):
-						forward_url = link['href']
-						if (_span := link.find('span')):
-							forward_from = _span.text
-						continue
-					if 'tgme_widget_message_photo_wrap' in link.attrs.get('class', []):
-						_style = link.attrs.get('style')
-						_photo = re.sub(r".*url\('(http.*)'\)", r'\1', _style)
-						photos.append(_photo)
-						continue
-					if (_videos := link.find('div', class_ = 'tgme_widget_message_video_wrap')):
-						if (_video := _videos.find('video')):
-							_video = _video.attrs.get('src')
-							videos.append(_video)
-							continue
-					if (_videos := link.find('i', class_ = 'tgme_widget_message_video_thumb')):
-						_style = _videos.attrs.get('style')
-						_video = re.sub(r".*url\('(http.*)'\)", r'\1', _style)
-						photos.append(_video)
-					if link['href'] == rawUrl or link['href'] == url:
-						# Generic filter of links to the post itself, catches videos, photos, and the date link
-						continue
-					if _SINGLE_MEDIA_LINK_PATTERN.match(link['href']):
-						# Individual photo or video link
-						continue
-					href = urllib.parse.urljoin(pageUrl, link['href'])
-					if href not in outlinks:
-						outlinks.append(href)
 			else:
-				user = None
-				author = None
-				forward_from = None
-				forward_url = None
-				photos = []
-				videos = []
 				content = None
-				outlinks = []
+			for link in post.find_all('a'):
+				if 'tgme_widget_message_user'in link.parent.attrs.get('class', []):
+					user = link['href']
+					continue
+				if 'tgme_widget_message_author'in link.parent.attrs.get('class', []):
+					if (_span := link.find('span')):
+						author = _span.text
+						continue
+				if 'tgme_widget_message_forwarded_from'in link.parent.attrs.get('class', []):
+					forward_url = link['href']
+					if (_span := link.find('span')):
+						forward_from = _span.text
+					continue
+				if 'tgme_widget_message_photo_wrap' in link.attrs.get('class', []):
+					_style = link.attrs.get('style')
+					_photo = re.sub(r".*url\('(http.*)'\)", r'\1', _style)
+					photos.append(_photo)
+					continue
+				if (_videos := link.find('div', class_ = 'tgme_widget_message_video_wrap')):
+					if (_video := _videos.find('video')):
+						_video = _video.attrs.get('src')
+						videos.append(_video)
+						continue
+				if (_videos := link.find('i', class_ = 'tgme_widget_message_video_thumb')):
+					_style = _videos.attrs.get('style')
+					_video = re.sub(r".*url\('(http.*)'\)", r'\1', _style)
+					photos.append(_video)
+				if link['href'] == rawUrl or link['href'] == url:
+					# Generic filter of links to the post itself, catches videos, photos, and the date link
+					continue
+				if _SINGLE_MEDIA_LINK_PATTERN.match(link['href']):
+					# Individual photo or video link
+					continue
+				href = urllib.parse.urljoin(pageUrl, link['href'])
+				if href not in outlinks:
+					outlinks.append(href)
 			linkPreview = None
 			if (linkPreviewA := post.find('a', class_ = 'tgme_widget_message_link_preview')):
 				kwargs = {}
@@ -190,12 +189,23 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 			yield self._get_entity()
 			return
 		r, soup = self._initial_page()
-		if '/s/' not in r.url:
+		if '/s/' not in r.url and self.postid is None:
 			_logger.warning('No public post list for this user')
 			return
 		while True:
 			yield from self._soup_to_items(soup, r.url)
 			pageLink = soup.find('a', attrs = {'class': 'tme_messages_more', 'data-before': True})
+			# check if we are in postid mode
+			self._idx += 1
+			if self.postid is not None:
+				if self.postn - self._idx > 0:
+					r = self._get(f'https://t.me/{self._name}/{self.postid - self._idx}?embed=1&mode=tme', headers = self._headers)
+					if r.status_code != 200:
+						raise snscrape.base.ScraperException(f'Got status code {r.status_code}')
+					soup = bs4.BeautifulSoup(r.text, 'lxml')
+					continue
+				else:
+					break
 			if not pageLink:
 				break
 			nextPageUrl = urllib.parse.urljoin(r.url, pageLink['href'])
@@ -259,7 +269,9 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 	def _cli_setup_parser(cls, subparser):
 		subparser.add_argument('channel', type = snscrape.utils.nonempty_string_arg('channel'), help = 'A channel name')
 		subparser.add_argument('--info', action = 'store_true', default = False, help = 'only get channel info')
+		subparser.add_argument('--postid', type = int, default = None, help = 'post id to start fetch')
+		subparser.add_argument('--postn', type = int, default = None, help = 'number of posts to fetch')
 
 	@classmethod
 	def _cli_from_args(cls, args):
-		return cls._cli_construct(args, args.channel, info = args.info)
+		return cls._cli_construct(args, args.channel, info = args.info, postid = args.postid, postn = args.postn)
