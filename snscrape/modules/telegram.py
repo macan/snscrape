@@ -34,6 +34,7 @@ class TelegramPost(snscrape.base.Item):
 	views: str
 	user: str
 	author: str
+	owner: str
 	forward_from: str
 	forward_url: str
 	photos: list
@@ -115,6 +116,7 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 			message = post.select('div.tgme_widget_message_text.js-message_text')
 			user = None
 			author = None
+			owner = None
 			forward_from = None
 			forward_url = None
 			photos = []
@@ -131,8 +133,12 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 					continue
 				if 'tgme_widget_message_author'in link.parent.attrs.get('class', []):
 					if (_span := link.find('span')):
+						owner = _span.text
+					if (_span := link.parent.find('span')):
 						author = _span.text
-						continue
+					else:
+						author = owner
+					continue
 				if 'tgme_widget_message_forwarded_from'in link.parent.attrs.get('class', []):
 					forward_url = link['href']
 					if (_span := link.find('span')):
@@ -152,15 +158,42 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 					_style = _videos.attrs.get('style')
 					_video = re.sub(r".*url\('(http.*)'\)", r'\1', _style)
 					photos.append(_video)
+				if 'message_media_not_supported' in link.parent.attrs.get('class', []):
+					_label = link.parent.select('div.message_media_not_supported_label')
+					if len(_label) > 0 and not content:
+						content = _label[0].text
+					continue
+				if 'tgme_widget_message_poll' in link.parent.attrs.get('class', []):
+					_poll_question = ''
+					_label = link.parent.select('div.tgme_widget_message_poll_question')
+					if len(_label) > 0:
+						_poll_question = _label[0].text
+					_labels = link.select('div.tgme_widget_message_poll_option')
+					_poll_options = [_poll_question]
+					for _label in _labels:
+						_percent = _label.select('div.tgme_widget_message_poll_option_percent')
+						_value = _label.select('div.tgme_widget_message_poll_option_text')
+						if len(_percent) > 0 and len(_value) > 0:
+							_poll_options.append(f"{_percent[0].text}: {_value[0].text}")
+					if not content:
+						content = "\n".join(_poll_options)
 				if link['href'] == rawUrl or link['href'] == url:
 					# Generic filter of links to the post itself, catches videos, photos, and the date link
 					continue
 				if _SINGLE_MEDIA_LINK_PATTERN.match(link['href']):
 					# Individual photo or video link
 					continue
+				if 'core.telegram.org/widgets' in link['href']:
+					continue
 				href = urllib.parse.urljoin(pageUrl, link['href'])
 				if href not in outlinks:
 					outlinks.append(href)
+			for link in post.find_all('i'):
+				if 'tgme_widget_message_sticker' in link.attrs.get('class', []):
+					photos.append(link.attrs.get('data-webp'))
+			for link in post.find_all('video'):
+				if 'tgme_widget_message_videosticker' in link.parent.attrs.get('class', []):
+					videos.append(link.attrs.get('src'))
 			linkPreview = None
 			if (linkPreviewA := post.find('a', class_ = 'tgme_widget_message_link_preview')):
 				kwargs = {}
@@ -182,7 +215,7 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 					else:
 						_logger.warning(f'Could not process link preview right image on {url}')
 				linkPreview = LinkPreview(**kwargs)
-			yield TelegramPost(url = url, date = date, content = content, outlinks = outlinks, views = views, user = user, author = author, forward_from = forward_from, forward_url = forward_url, photos = photos, videos = videos, reply = reply, linkPreview = linkPreview)
+			yield TelegramPost(url = url, date = date, content = content, outlinks = outlinks, views = views, user = user, author = author, owner = owner, forward_from = forward_from, forward_url = forward_url, photos = photos, videos = videos, reply = reply, linkPreview = linkPreview)
 
 	def get_items(self):
 		if self.info:
