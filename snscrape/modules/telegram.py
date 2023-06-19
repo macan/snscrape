@@ -175,6 +175,9 @@ class TelegramChannelScraper(snscrape.base.Scraper):
 						_value = _label.select('div.tgme_widget_message_poll_option_text')
 						if len(_percent) > 0 and len(_value) > 0:
 							_poll_options.append(f"{_percent[0].text}: {_value[0].text}")
+					_votes = link.select('div.tgme_widget_message_poll_votes')
+					if len(_votes) > 0:
+						_poll_options.append(_votes[0].text)
 					if not content:
 						content = "\n".join(_poll_options)
 				if link['href'] == rawUrl or link['href'] == url:
