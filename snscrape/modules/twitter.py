@@ -1800,7 +1800,7 @@ class TwitterSearchScraper(_TwitterAPIScraper):
 	def _cli_setup_parser(cls, subparser):
 		subparser.add_argument('--cursor', metavar = 'CURSOR', help = '(deprecated)')
 		group = subparser.add_mutually_exclusive_group(required = False)
-		group.add_argument('--mode', type = snscrape.base.nonempty_string('mode'), help = 'Search types: live/top/user/image/video')
+		group.add_argument('--mode', type = snscrape.uitls.nonempty_string('mode'), help = 'Search types: live/top/user/image/video')
 		subparser.add_argument('--max-empty-pages', dest = 'maxEmptyPages', metavar = 'N', type = int, default = 20, help = 'Stop after N empty pages from Twitter; set to 0 to disable')
 		subparser.add_argument('query', type = snscrape.utils.nonempty_string_arg('query'), help = 'A Twitter search string')
 		subparser.add_argument('--rfilter', type = str, help = 'A Twitter search result filter: user/image/video')
@@ -1873,8 +1873,8 @@ class TwitterUserScraper(TwitterSearchScraper):
 
 		subparser.add_argument('--user-id', dest = 'isUserId', action = 'store_true', default = False, help = 'Use user ID instead of username')
 		subparser.add_argument('user', type = user, help = 'A Twitter username (without @)')
-		subparser.add_argument('--auth', type = snscrape.base.nonempty_string('auth'), help = 'Auth token')
-		subparser.add_argument('--csrf', type = snscrape.base.nonempty_string('csrf'), help = 'CSRF token')
+		subparser.add_argument('--auth', type = snscrape.utils.nonempty_string('auth'), help = 'Auth token')
+		subparser.add_argument('--csrf', type = snscrape.utils.nonempty_string('csrf'), help = 'CSRF token')
 
 	@classmethod
 	def _cli_from_args(cls, args):
