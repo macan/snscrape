@@ -2002,37 +2002,36 @@ class TwitterUserConnectScraper(TwitterUserScraper):
 		else:
 			userId = self._user
 		paginationVariables = {
-			'include_profile_interstitial_type': '1',
-			'include_blocking': '1',
-			'include_blocked_by': '1',
-			'include_followed_by': '1',
-			'include_want_retweets': '1',
-			'include_mute_edge': '1',
-			'include_can_dm': '1',
-			'include_can_media_tag': '1',
-			'include_ext_has_nft_avatar': '1',
-			'skip_status': '1',
-			'cards_platform': 'Web-12',
-			'include_cards': '1',
-			'include_ext_alt_text': 'true',
-			'include_ext_limited_action_results': 'false',
-			'include_quote_count': 'true',
-			'include_reply_count': '1',
-			'tweet_mode': 'extended',
-			'include_ext_collab_control': 'true',
-			'include_entities': 'true',
-			'include_user_entities': 'true',
-			'include_ext_media_color': 'true',
-			'include_ext_media_availability': 'true',
-			'include_ext_sensitive_media_warning': 'true',
-			'include_ext_trusted_friends_metadata': 'true',
-			'send_error_codes': 'true',
-			'simple_quoted_tweet': 'true',
-			'count': '20',
-			'display_location': 'connect',
-			'client_type': 'rweb',
-			'user_id': userId,
-			'ext': 'mediaStats,highlightedLabel,hasNftAvatar,voiceInfo,enrichments,superFollowMetadata,unmentionInfo,editControl,collab_control,vibe'
+			"variables": {
+				"count": 20,
+				"context": f'{{\"contextualUserId\":\"{userId}\"}}'
+			},
+			"features": {
+				"rweb_lists_timeline_redesign_enabled": True,
+                                "responsive_web_graphql_exclude_directive_enabled": True,
+				"verified_phone_label_enabled": False,
+				"creator_subscriptions_tweet_preview_api_enabled": True,
+				"responsive_web_graphql_timeline_navigation_enabled": True,
+				"responsive_web_graphql_skip_user_profile_image_extensions_enabled": False,
+				"tweetypie_unmention_optimization_enabled": True,
+				"responsive_web_edit_tweet_api_enabled": True,
+				"graphql_is_translatable_rweb_tweet_is_translatable_enabled": True,
+				"view_counts_everywhere_api_enabled": True,
+				"longform_notetweets_consumption_enabled": True,
+				"responsive_web_twitter_article_tweet_consumption_enabled": False,
+				"tweet_awards_web_tipping_enabled": False,
+				"freedom_of_speech_not_reach_fetch_enabled": True,
+				"standardized_nudges_misinfo": True,
+				"tweet_with_visibility_results_prefer_gql_limited_actions_policy_enabled": True,
+				"longform_notetweets_rich_text_read_enabled": True,
+				"longform_notetweets_inline_media_enabled": True,
+				"responsive_web_media_download_video_enabled": False,
+				"responsive_web_enhance_cards_enabled": False
+			},
+			"fieldToggles": {
+				"withAuxiliaryUserLabels": False,
+				"withArticleRichContentState": False
+			}
 		}
 		variables = paginationVariables.copy()
 
@@ -2040,17 +2039,18 @@ class TwitterUserConnectScraper(TwitterUserScraper):
 			print("Auth info must be provided.")
 			return
 		self._set_auth_info(self._auth, self._csrf)
-		obj = self._get_api_data('https://twitter.com/i/api/2/people_discovery/modules_urt.json', _TwitterAPIType.V2, variables)
+		obj = self._get_api_data('https://twitter.com/i/api/graphql/cUcA-L-5c4tER3IEDorYtQ/ConnectTabTimeline', _TwitterAPIType.GRAPHQL, variables)
 		self._clr_auth_info()
-		for instruction in obj['timeline']['instructions']:
-			if not 'addEntries' in instruction:
+		for instruction in obj['data']['connect_tab_timeline']['timeline']['instructions']:
+			if instruction['type'] != 'TimelineAddEntries':
 				continue
-			for entry in instruction['addEntries']['entries']:
-				if entry['entryId'] == 'connect-module-2':
-					for item in entry['content']['timelineModule']['items']:
-						self._user = item['item']['content']['user']['id']
-						self._isUserId = True
-						yield self._get_entity()
+			for entry in instruction['entries']:
+				if entry['entryId'] == 'similartomodule-1':
+					for item in entry['content']['items']:
+						if item['item']['itemContent']['user_results']['result']['__typename'] == 'User':
+							self._user = int(item['item']['itemContent']['user_results']['result']['rest_id'])
+							self._isUserId = True
+							yield self._user_to_user(item['item']['itemContent']['user_results']['result']['legacy'], id_ = self._user)
 
 class TwitterHashtagScraper(TwitterSearchScraper):
 	name = 'twitter-hashtag'
