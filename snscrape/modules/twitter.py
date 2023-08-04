@@ -1581,7 +1581,11 @@ class _TwitterAPIScraper(snscrape.base.Scraper):
 								_logger.warning(f'Skipping promoted tweet entry {item["entryId"]}')
 								continue
 							tweetId = int(item['entryId'][len(entry['entryId']) + 7:])
-							yield self._graphql_timeline_tweet_item_result_to_tweet(item['item']['itemContent']['tweet_results']['result'], tweetId = tweetId, **kwargs)
+							if item['item']['itemContent']['itemType'] == 'TimelineTweet':
+								if 'result' in item['item']['itemContent']['tweet_results']:
+									yield self._graphql_timeline_tweet_item_result_to_tweet(item['item']['itemContent']['tweet_results']['result'], tweetId = tweetId, **kwargs)
+								else:
+                                                                        _logger.warning(f'Skipping empty tweet entry {entry["entryId"]}')
 				elif not entry['entryId'].startswith(('cursor-', 'toptabsrpusermodule-', 'tweetdetailrelatedtweets-', 'label-')):
 					_logger.warning(f'Skipping unrecognised entry ID: {entry["entryId"]!r}')
 
